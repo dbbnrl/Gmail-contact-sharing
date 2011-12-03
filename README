@@ -1,7 +1,52 @@
-This is a small Python utility that synchronizes contacts between two or more Gmail accounts.
+DShare is a small Python utility that synchronizes contacts between two or more Gmail accounts.
 
-Sharing is performed between designated contact groups. The group name indicates which remote group/account to share with. For instance, if User1 has a group named "Friends [User2]", that group will be kept synchronized with the "Friends" group belonging to User2.
+Sharing is performed between designated contact groups.
+The group name indicates which remote group/account to share with.
+
+For instance, if User1 has a group named "Friends [User2]", that group will be kept synchronized with the "Friends"
+group belonging to User2.
 
 It is intended to be run periodically (i.e. as a cron job).
 
 At the moment, it seems to work, but is missing a ton of features and polish. Contributors welcome!
+
+===== Usage: =====
+
+Add an account to the database:
+  dshare.py -a <usertag>
+
+This will generate a URL that will prompt you to grant this application read/write access to your gmail contacts.
+When you visit this URL, make sure you're logged into gmail under the account you wish to add.
+Note that <usertag> has no relation to your actual gmail username, unless you choose to make them the same.
+Once access is granted, Google will return an authentication token.  This token is what's stored in the database;
+never your password.
+
+Remove an account from the database:
+  dshare.py -d <usertag>
+
+List all accounts in the database:
+  dshare.py -l
+
+Synchronize all accounts in the database:
+  dshare.py -s
+
+Test mode; pretend to synchronize but don't write any changes:
+  dshare.py -t
+
+Sharing is performed on a per-group basis.  Any group with a name of the form "Name [tag]" (a Slave group) will be
+kept in sync with the corresponding Master group called "Name" belonging to the account with usertag "tag".  Any number
+of Slaves can point to the same Master.  A Slave cannot be a Master (i.e., groups with names like "Name [tag1] [tag2]"
+are rejected).
+
+The Master/Slave concept does not imply a difference in permissions.  Any account can change any shared contact, and the
+change will be propagated as needed.  At the moment there is no concept of access control or asymmetric permissions.
+That means DShare is currently most useful for small groups of peers, such as a family wanting a shared contact
+database (which was my motivation for creating it).
+
+Within a shared contact group, additions, deletions, and modifications of contacts are propagated to all other mirrors
+of the group.
+
+If more than one account modifies a contact between synchronizations, DShare takes the conservative approach and splits
+the contact into two coexisting versions.  Since both versions will be shared, all accounts will wind up with both
+versions.  GMail's excellent contact merge tool can then be used to merge them together, resulting in the deletion of
+one of the two versions.  (The merge and the deletion will be propagated at the next sync as usual).
