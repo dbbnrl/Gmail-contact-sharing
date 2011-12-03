@@ -38,10 +38,10 @@ kept in sync with the corresponding Master group called "Name" belonging to the 
 of Slaves can point to the same Master.  A Slave cannot be a Master (i.e., groups with names like "Name [tag1] [tag2]"
 are rejected).
 
-The Master/Slave concept does not imply a difference in permissions.  Any account can change any shared contact, and the
-change will be propagated as needed.  At the moment there is no concept of access control or asymmetric permissions.
-That means DShare is currently most useful for small groups of peers, such as a family wanting a shared contact
-database (which was my motivation for creating it).
+The Master/Slave concept does not imply a difference in permissions.  Any account can change any shared contact, and
+the change will be propagated as needed.  At the moment there is no concept of access control or asymmetric
+permissions. That means DShare is currently most useful for small groups of peers, such as a family wanting a shared
+contact database (which was my motivation for creating it).
 
 Within a shared contact group, additions, deletions, and modifications of contacts are propagated to all other mirrors
 of the group.
