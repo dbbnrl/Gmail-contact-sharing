@@ -1,0 +1,7 @@
+This is a small Python utility that synchronizes contacts between two or more Gmail accounts.
+
+Sharing is performed between designated contact groups. The group name indicates which remote group/account to share with. For instance, if User1 has a group named "Friends [User2]", that group will be kept synchronized with the "Friends" group belonging to User2.
+
+It is intended to be run periodically (i.e. as a cron job).
+
+At the moment, it seems to work, but is missing a ton of features and polish. Contributors welcome!
