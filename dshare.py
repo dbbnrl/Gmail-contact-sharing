@@ -169,6 +169,11 @@ class ContactWrapper(object):
         for udf in contact_entry.user_defined_field:
             if (udf.key == ""):
                 udf.key = "-"
+        if ((not contact_entry.structured_postal_address) and
+            (not contact_entry.email)):
+            print "No email or addr for %s" % contact_entry.title.text
+            contact_entry.email.append(gdata.data.Email(address="none",
+                primary='true', rel=gdata.data.WORK_REL))
         # Extract and remove from contact_entry all account-specific
         # data except items that are ignored on contact update anyway.
         for group_entry in contact_entry.group_membership_info:
