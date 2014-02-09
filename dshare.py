@@ -39,6 +39,21 @@ def _DelEP(entry, name):
 def _MakeGuid(entry):
     return entry.id.text + "@" + entry.etag
 
+def _ContactName(entry):
+    name = entry.title.text
+    if not (name is None):
+        return name
+    org = entry.organization
+    if not (org is None):
+        name = org.name.text
+        if not (name is None):
+            return name
+    if (len(entry.email) > 0):
+        return entry.email[0].address
+    if (len(entry.phone_number) > 0):
+        return entry.phone_number[0].text
+    return "<Unknown>"
+
 def _ContactHash(entry, groupinfo):
     c2 = copy(entry)
     c2.etag = ""
@@ -161,6 +176,7 @@ class ContactWrapper(object):
         self.ucontact = ucontact
 
     def ParseEntry(self, contact_entry):
+        #HACK:  Remove this someday if possible!:
         # The web interface can create User Defined Fields with empty
         # keys, but the python API won't resend an empty key when
         # creating/updating an entry -- it simply removes the "key="
@@ -169,11 +185,14 @@ class ContactWrapper(object):
         for udf in contact_entry.user_defined_field:
             if (udf.key == ""):
                 udf.key = "-"
+
+        #HACK:  Remove this someday if possible!:
         if ((not contact_entry.structured_postal_address) and
             (not contact_entry.email)):
-            print "No email or addr for %s" % contact_entry.title.text
+            print "No email or addr for %s" % _ContactName(contact_entry)
             contact_entry.email.append(gdata.data.Email(address="none",
                 primary='true', rel=gdata.data.WORK_REL))
+
         # Extract and remove from contact_entry all account-specific
         # data except items that are ignored on contact update anyway.
         for group_entry in contact_entry.group_membership_info:
@@ -310,10 +329,7 @@ class ContactWrapper(object):
     def Name(self):
         if self.contact_entry is None:
             return "<dummy>"
-        name = self.contact_entry.title.text
-        if not (name is None):
-            return name
-        return self.contact_entry.email[0].address
+        return _ContactName(self.contact_entry)
 
     def ScopedName(self):
         return "%s(%s)@%s" % (self.Name(), self.guid, self.acct.name)
@@ -418,8 +434,8 @@ class GroupWrapper(object):
         try:
             master_group = master_acct.groups_by_name[master_gname]
         except KeyError:
-            print "(ERROR: Group %s not found in account %s)" % (
-                master_gname, master_aname)
+            print "(ERROR: Group <%s> not found in account %s.)" % (
+                master_gname, master_aname, self.name, self.acct.name)
             raise
         #~ print "(Last sync %s)" % self.last_sync
         self.shared = True
@@ -462,27 +478,31 @@ class AcctWrapper(object):
     def GetGroups(self):
         print "%s's groups:" % self.name
         feed = self.client.GetGroups(auth_token = self.auth_token)
-        for group_entry in feed.entry:
-            id = group_entry.id.text
-            group = GroupWrapper(self, group_entry)
-            gname = group.name
-            other_group = self.groups_by_name.get(gname)
-            if other_group is None:
-                print "  <%s>" % gname
-            else:
-                if other_group.system:
-                    print "  <%s> (hides system group)" % gname
-                    # This group will overwrite the system group in groups_by_*
-                elif group.system:
-                    print "  (system group %s hidden by user group)" % gname
-                    # Stop here so we *don't* overwrite the user group
-                    continue
+        while True:
+            for group_entry in feed.entry:
+                id = group_entry.id.text
+                group = GroupWrapper(self, group_entry)
+                gname = group.name
+                other_group = self.groups_by_name.get(gname)
+                if other_group is None:
+                    print "  <%s>" % gname
                 else:
-                    print "Error, %s has two user groups with the same name (%s)" % (
-                        self.name, gname)
-                    raise KeyError
-            self.groups_by_name[gname] = group
-            self.groups_by_id[id] = group
+                    if other_group.system:
+                        print "  <%s> (hides system group)" % gname
+                        # This group will overwrite the system group in groups_by_*
+                    elif group.system:
+                        print "  (system group %s hidden by user group)" % gname
+                        # Stop here so we *don't* overwrite the user group
+                        continue
+                    else:
+                        print "Error, %s has two user groups with the same name (%s)" % (
+                            self.name, gname)
+                        raise KeyError
+                self.groups_by_name[gname] = group
+                self.groups_by_id[id] = group
+            if feed.GetNextLink() is None:
+                break
+            feed = self.client.GetNext(feed, auth_token = self.auth_token)
 
     def GetContacts(self):
         query = gdata.contacts.client.ContactsQuery()
