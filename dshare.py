@@ -319,7 +319,7 @@ class ContactWrapper(object):
             # Contact does not exist.  Create it?
             if (len(self.groups) == 0):
                 return
-            print "Creating  %s" % self.ScopedName()
+            print "Creating  %s :%s" % (self.ScopedName(), self.GroupList())
             #~ print "PREHASH=%s" % self.Hash()
             if not test_mode:
                 new_entry = self.acct.client.CreateContact(self.FillEntry(), auth_token = self.acct.auth_token)
@@ -336,13 +336,22 @@ class ContactWrapper(object):
             else:
                 # Update it.
                 if not (self.guid is None):
-                    print "Updating  %s" % self.ScopedName()
+                    print "Updating  %s :%s" % (self.ScopedName(), self.GroupList())
                 else:
-                    print "Unlinking %s" % self.ScopedName()
+                    print "Unlinking %s :%s" % (self.ScopedName(), self.GroupList())
                 #~ print "PREHASH=%s" % self.Hash()
                 if not test_mode:
                     updated_entry = self.acct.client.Update(self.FillEntry(), auth_token = self.acct.auth_token)
                 #~ print "POSTHASH=%s" % self.Hash(updated_entry)
+
+    def GroupList(self):
+        l = ""
+        for group in self.groups:
+            if group.shared:
+                l += " <" + group.name + ">"
+            else:
+                l += " (" + group.name + ")"
+        return l
 
     def Name(self):
         if self.contact_entry is None:
