@@ -193,11 +193,11 @@ class ContactWrapper(object):
                 udf.key = "-"
 
         #HACK:  Remove this someday if possible!:
-        if ((not contact_entry.structured_postal_address) and
-            (not contact_entry.email)):
-            print "No email or addr for %s" % _ContactName(contact_entry)
-            contact_entry.email.append(gdata.data.Email(address="none",
-                primary='true', rel=gdata.data.WORK_REL))
+        #if ((not contact_entry.structured_postal_address) and
+            #(not contact_entry.email)):
+            #print "No email or addr for %s" % _ContactName(contact_entry)
+            #contact_entry.email.append(gdata.data.Email(address="none",
+                #primary='true', rel=gdata.data.WORK_REL))
 
         # Extract and remove from contact_entry all account-specific
         # data except items that are ignored on contact update anyway.
@@ -330,7 +330,7 @@ class ContactWrapper(object):
             # Contact does exist.  Delete or update?
             if (len(self.groups) == 0) and self.ucontact.deleted:
                 # Delete it.
-                print "Deleting %s" % self.ScopedName()
+                print "Deleting  %s" % self.ScopedName()
                 if not test_mode:
                     self.acct.client.Delete(self.FillEntry(), auth_token = self.acct.auth_token)
             else:
