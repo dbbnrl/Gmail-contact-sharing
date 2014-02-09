@@ -18,6 +18,8 @@ all_accts = {}
 all_ucontacts = {}
 all_ugroups = {}
 
+verbose = False
+
 def _GetEP(entry, name):
     for ep in entry.extended_property:
         if (ep.name == name):
@@ -76,6 +78,7 @@ class UContact(object):
         self.contacts = {}
         self.ugroups = {}
         self.guid = guid
+        self.deleted = False
         all_ucontacts[guid] = self
         #~ print "Created UContact %s" % guid
 
@@ -87,7 +90,6 @@ class UContact(object):
         for (acct, contact) in self.contacts.items():
             if contact is changed_contact:
                 continue
-            print " > %s Updates %s" % (changed_contact.ScopedName(), acct.name)
             possibly_split_contact = contact.UpdateFrom(changed_contact)
             self.contacts[acct] = possibly_split_contact
 
@@ -100,7 +102,7 @@ class UContact(object):
                 consistent_ugroups = False
             #~ print " > Trying ugroup %s" % ugroup.name
             for acct in ugroup.groups.keys():
-                if not (self.contacts.has_key(acct) or dummies.has_key(acct)):
+                if not (acct in self.contacts or acct in dummies):
                     #~ print " >> Adding deleted/new acct %s" % acct.name
                     dummies[acct] = ContactWrapper.Dummy(acct, self)
         # Find the first changed non-dummy contact, update all others
@@ -109,7 +111,8 @@ class UContact(object):
             if not changed_contact.IsChanged():
                 continue
             # If any non-dummy contacts are changed, all the dummies
-            # will be updated (and thus created).
+            # will be updated (and thus created).  Move them into our
+            # contacts list.
             self.contacts.update(dummies)
             dummies = {}
             #~ print "{cleared dummies}"
@@ -132,28 +135,31 @@ class UContact(object):
             arbitrary = self.contacts.values()[0]
             self.contacts.update(dummies)
             dummies = {}
-            print " (IC)",
+            #print " (IC)",
             self.UpdateAllFrom(arbitrary)
         else:
             # Since everything is consistent, we'll assume it's safe to
             # treat dummy contacts as evidence that somebody deleted a
             # contact.  Update all non-dummies from each dummy to
             # propagate the deletion(s).
+            self.deleted = True
             for dummy in dummies.values():
-                print " > Deleted: %s on %s" % (self.guid, dummy.acct.name)
+                #print " > Deleted: %s on %s" % (self.guid, dummy.acct.name)
                 for (acct, contact) in self.contacts.items():
-                    print " >> Updating %s" % contact.acct.name
+                    #print " >> Updating %s" % contact.acct.name
                     contact.UpdateFrom(dummy)
         return True
 
     def DoSharing(self):
+        global verbose
         #~ print "=========== Checking %s: ===========" % self.guid
         updated = self.ShareSomething()
         if not updated:
             return
         #~ print "UContact %s changed" % self.guid
         for ugroup in self.ugroups:
-            print " ... marking %s updated" % ugroup.name
+            if verbose:
+                print " ... marking %s updated" % ugroup.name
             ugroup.updated = True
 
     def DoServerUpdate(self, test_mode):
@@ -262,19 +268,26 @@ class ContactWrapper(object):
         ugroups = self.ucontact.ugroups
         self.ucontact = UContact(self.fresh_guid)
         self.guid = self.fresh_guid
-        print "Renamed to %s" % self.ScopedName()
+        #print "Renamed to %s" % self.ScopedName()
         self.ucontact.ugroups = ugroups
         self.ucontact.add(self)
         self.ucontact.DoSharing()
 
     def UpdateFrom(self, other_contact):
         if self.IsChanged():
-            print "Conflicting changes; splitting %s" % self.ScopedName()
+            print " CONFLICT: %s <==> %s" % (other_contact.ScopedName(), self.acct.name)
             self.SplitUContact()
             return self.Dummy(self.acct, other_contact.ucontact).UpdateFrom(other_contact)
-        if not other_contact.IsDummy():
-            self.contact_entry = copy(other_contact.contact_entry)
         other_acct = other_contact.acct
+        if not other_contact.IsDummy():
+            if self.IsDummy():
+                print " CREATE: ",
+            else:
+                print " UPDATE: ",
+            print " %s ==> %s" % (other_contact.ScopedName(), self.acct.name)
+            self.contact_entry = copy(other_contact.contact_entry)
+        else:
+            print " DELETE:   %s ==> %s" % (other_acct.name, self.ScopedName())
         # First remove all of my groups that are shared with other_acct
         groups = []
         for group in self.groups:
@@ -291,6 +304,7 @@ class ContactWrapper(object):
         return self
 
     def DoServerUpdate(self, test_mode):
+        global verbose
         if (len(self.SharedGroups()) == 0):
             #~ print "Removing GUID: %s" % self.ScopedName()
             self.guid = None
@@ -305,22 +319,26 @@ class ContactWrapper(object):
             # Contact does not exist.  Create it?
             if (len(self.groups) == 0):
                 return
-            print "Creating new contact %s" % self.ScopedName()
+            print "Creating  %s" % self.ScopedName()
             #~ print "PREHASH=%s" % self.Hash()
             if not test_mode:
                 new_entry = self.acct.client.CreateContact(self.FillEntry(), auth_token = self.acct.auth_token)
-                print "New contact's ID: %s" % new_entry.id.text
+                if verbose:
+                    print "   ... New contact's ID: %s" % new_entry.id.text
             #~ print "POSTHASH=%s" % self.Hash(new_entry)
         else:
             # Contact does exist.  Delete or update?
-            if (len(self.groups) == 0):
+            if (len(self.groups) == 0) and self.ucontact.deleted:
                 # Delete it.
-                print "Deleting contact %s" % self.ScopedName()
+                print "Deleting %s" % self.ScopedName()
                 if not test_mode:
                     self.acct.client.Delete(self.FillEntry(), auth_token = self.acct.auth_token)
             else:
                 # Update it.
-                print "Updating contact %s" % self.ScopedName()
+                if not (self.guid is None):
+                    print "Updating  %s" % self.ScopedName()
+                else:
+                    print "Unlinking %s" % self.ScopedName()
                 #~ print "PREHASH=%s" % self.Hash()
                 if not test_mode:
                     updated_entry = self.acct.client.Update(self.FillEntry(), auth_token = self.acct.auth_token)
@@ -332,7 +350,11 @@ class ContactWrapper(object):
         return _ContactName(self.contact_entry)
 
     def ScopedName(self):
-        return "%s(%s)@%s" % (self.Name(), self.guid, self.acct.name)
+        global verbose
+        if verbose:
+            return "%s(%s)@%s" % (self.Name(), self.guid, self.acct.name)
+        else:
+            return "%s@%s" % (self.Name(), self.acct.name)
 
     def Hash(self, entry=None):
         if entry is None:
@@ -386,7 +408,7 @@ class UGroup(object):
         if not self.updated:
             print "%s not updated" % self.name
             return
-        print "%s updated, writing timestamps..." % self.name
+        print "%s updated, writing new timestamps..." % self.name
         self.timestamp = str(time.time())
         for group in self.groups.values():
             group.DoServerUpdate(test_mode)
@@ -458,7 +480,7 @@ class GroupWrapper(object):
         _SetEP(self.group_entry, "DShare", self.ugroup.timestamp)
         if not test_mode:
             updated_group = self.acct.client.Update(self.group_entry, auth_token = self.acct.auth_token)
-        print "Group timestamp %s: %s" % (self.ScopedName(), self.ugroup.timestamp)
+        print "   ... updated %s" % self.ScopedName()
 
 
 class AcctWrapper(object):
@@ -477,7 +499,9 @@ class AcctWrapper(object):
 
     def GetGroups(self):
         print "%s's groups:" % self.name
-        feed = self.client.GetGroups(auth_token = self.auth_token)
+        query = gdata.contacts.client.ContactsQuery()
+        query.max_results = 10000
+        feed = self.client.GetGroups(q = query, auth_token = self.auth_token)
         while True:
             for group_entry in feed.entry:
                 id = group_entry.id.text
@@ -502,14 +526,18 @@ class AcctWrapper(object):
                 self.groups_by_id[id] = group
             if feed.GetNextLink() is None:
                 break
-            feed = self.client.GetNext(feed, auth_token = self.auth_token)
+            feed = self.client.GetNext(feed, q = query, auth_token = self.auth_token)
 
     def GetContacts(self):
         query = gdata.contacts.client.ContactsQuery()
         query.max_results = 10000
         feed = self.client.GetContacts(q = query, auth_token = self.auth_token)
-        for contact_entry in feed.entry:
-            contact = ContactWrapper.FromEntry(self, contact_entry)
+        while True:
+            for contact_entry in feed.entry:
+                contact = ContactWrapper.FromEntry(self, contact_entry)
+            if feed.GetNextLink() is None:
+                break
+            feed = self.client.GetNext(feed, q = query, auth_token = self.auth_token)
 
     def CreateShareMap(self):
         print "Mapping shares from %s:" % self.name
@@ -517,7 +545,7 @@ class AcctWrapper(object):
             group.CreateShareMap()
 
 def usage():
-    print 'python dshare.py -a <user> | -d <user> | -l | -s | -t'
+    print 'python dshare.py -a <user> | -d <user> | -l | -s | -t | -v'
     sys.exit(2)
 
 def main():
@@ -527,7 +555,7 @@ def main():
 
     # Parse command line options
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'a:d:lst')
+        opts, args = getopt.getopt(sys.argv[1:], 'a:d:lstv')
     except getopt.error, msg:
         usage()
 
@@ -536,6 +564,7 @@ def main():
 
     do_sync = False
     test_mode = False
+    global verbose
 
     for option, arg in opts:
         if option == '-a':
@@ -581,6 +610,8 @@ def main():
         elif option == '-t':
             do_sync = True
             test_mode = True
+        elif option == '-v':
+            verbose = True
 
     if not do_sync: return
 
@@ -604,7 +635,7 @@ def main():
     for ds in all_accts.values():
         ds.GetContacts()
 
-    print "**************** UPDATE CONTACTS **************"
+    print "**************** ANALYZE CONTACTS **************"
     for ucontact in all_ucontacts.values():
         ucontact.DoSharing()
 
